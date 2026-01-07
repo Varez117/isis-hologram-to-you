@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Holo-Tulip Interface v2</title>
+    <title>Holo-Tulip Interface v3.0 (3D Control)</title>
     <style>
         body { margin: 0; overflow: hidden; background-color: #050005; font-family: 'Consolas', monospace; }
         canvas { display: block; }
@@ -14,9 +14,12 @@
             z-index: 2; border-radius: 8px;
             transform: scaleX(-1);
             border: 1px solid #ff0055; opacity: 0.4;
-            transition: opacity 0.3s;
+            transition: opacity 0.3s, filter 0.3s;
         }
-        #input_video:hover { opacity: 1; }
+        #input_video.inactive {
+            filter: grayscale(100%) brightness(30%);
+            opacity: 0.2;
+        }
 
         #ui-layer {
             position: absolute; top: 20px; left: 20px; z-index: 3;
@@ -28,7 +31,33 @@
         #loading {
             position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
             color: #ff0055; font-size: 1.2rem; text-shadow: 0 0 10px #ff0055;
+            pointer-events: none;
         }
+
+        #cam-toggle {
+            position: absolute; bottom: 150px; right: 20px; z-index: 10;
+            background: rgba(0,0,0,0.7); border: 1px solid #ff0055;
+            color: #ff0055; padding: 10px 15px; cursor: pointer;
+            font-family: 'Consolas', monospace; text-transform: uppercase;
+            border-radius: 4px; transition: all 0.3s;
+        }
+        #cam-toggle:hover { background: #ff0055; color: #000; box-shadow: 0 0 15px #ff0055; }
+
+        #manual-controls {
+            display: none; 
+            position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%);
+            width: 320px; padding: 15px; z-index: 10;
+            background: rgba(10, 0, 10, 0.9);
+            border: 1px solid #ff0055; border-radius: 8px;
+            box-shadow: 0 0 20px rgba(255, 0, 85, 0.2);
+            max-height: 400px; overflow-y: auto; /* Scroll si la pantalla es pequeña */
+        }
+        
+        .control-group { margin-bottom: 8px; }
+        .control-group label { display: flex; justify-content: space-between; color: #ff99bb; font-size: 0.75rem; margin-bottom: 2px; }
+        .control-group input { width: 100%; cursor: pointer; accent-color: #ff0055; height: 10px; }
+        
+        .sim-title { text-align: center; color: #fff; border-bottom: 1px solid #333; margin-bottom: 10px; font-size: 0.9rem; padding-bottom: 5px;}
     </style>
     
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
@@ -39,12 +68,49 @@
 <body>
 
     <div id="loading">GENERATING FLORA...</div>
+    
     <div id="ui-layer">
         <h1>PROJECT: TULIP</h1>
         <div class="status" id="status-text">WAITING FOR HAND...</div>
         <div class="status" id="debug-state">STATE: DISPERSED</div>
     </div>
+
     <video id="input_video"></video>
+    <button id="cam-toggle">STOP CAMERA</button>
+
+    <div id="manual-controls">
+        <div class="sim-title">SIMULATION OVERRIDE</div>
+        
+        <div class="control-group">
+            <label><span>FLOWER STATE</span> <span>(Open/Close)</span></label>
+            <input type="range" id="sim-open" min="0" max="1" step="0.01" value="1">
+        </div>
+
+        <div class="control-group">
+            <label>POSITION X</label>
+            <input type="range" id="sim-x" min="-25" max="25" step="0.1" value="0">
+        </div>
+
+        <div class="control-group">
+            <label>POSITION Y</label>
+            <input type="range" id="sim-y" min="-20" max="20" step="0.1" value="0">
+        </div>
+
+        <div class="control-group">
+            <label>ROTATION X (Pitch)</label>
+            <input type="range" id="sim-rot-x" min="-3.14" max="3.14" step="0.1" value="0">
+        </div>
+
+        <div class="control-group">
+            <label>ROTATION Y (Yaw)</label>
+            <input type="range" id="sim-rot-y" min="-3.14" max="3.14" step="0.1" value="0">
+        </div>
+
+        <div class="control-group">
+            <label>ROTATION Z (Roll)</label>
+            <input type="range" id="sim-rot-z" min="-3.14" max="3.14" step="0.1" value="0">
+        </div>
+    </div>
 
     <script id="vertexShader" type="x-shader/x-vertex">
         uniform float uTime;
@@ -57,7 +123,7 @@
         void main() {
             vec3 pos = position;
 
-            // --- LÓGICA DE DISPERSIÓN ---
+            // Dispersión
             float noiseX = sin(uTime * 2.0 + aRandom * 10.0) * 2.0;
             float noiseY = cos(uTime * 1.5 + aRandom * 20.0) * 2.0;
             float noiseZ = sin(uTime * 2.5 + aRandom * 30.0) * 2.0;
@@ -65,32 +131,31 @@
             vec3 explosionDir = normalize(pos) * (20.0 + aRandom * 30.0);
             vec3 chaoticPos = pos + explosionDir + vec3(noiseX, noiseY, noiseZ);
             
-            // Interpolamos posición
             pos = mix(pos, chaoticPos, uExplosion);
 
-            // Rotación suave siempre activa
+            // Nota: He quitado la rotación automática en shader para que obedezca 100% a tus controles
+            // Si quieres que siga girando sobre su eje un poco, descomenta esto:
+            /*
             float angle = uTime * 0.1; 
             float s = sin(angle); float c = cos(angle);
             float x = pos.x * c - pos.z * s;
             float z = pos.x * s + pos.z * c;
             pos.x = x; pos.z = z;
+            */
 
             vec4 mvPosition = modelViewMatrix * vec4(pos, 1.0);
             gl_Position = projectionMatrix * mvPosition;
             
-            // El tamaño crece un poco al explotar para ayudar al efecto de blur
             float sizeMod = 1.0 + uExplosion * 2.0; 
             gl_PointSize = (4.0 * aSize * sizeMod) * (60.0 / -mvPosition.z);
             
             vPos = position; 
-            
-            // Alpha base (se reduce un poco al dispersarse para no saturar)
             vAlpha = 1.0 - (uExplosion * 0.4);
         }
     </script>
 
     <script id="fragmentShader" type="x-shader/x-fragment">
-        uniform float uExplosion; // Necesitamos esta variable aquí también para el blur
+        uniform float uExplosion; 
         varying vec3 vPos;
         varying float vAlpha;
         
@@ -99,7 +164,6 @@
             float dist = length(coord);
             if(dist > 0.5) discard;
 
-            // --- COLOREADO TULIPÁN ---
             float height = smoothstep(-10.0, 20.0, vPos.y);
             
             vec3 darkPink = vec3(0.8, 0.0, 0.4); 
@@ -113,18 +177,10 @@
                 color = mix(color, vec3(0.0, 0.5, 0.2), 0.7);
             }
 
-            // --- NUEVO: BRILLO EXTRA AL DISPERSARSE ---
-            // Añadimos un poco de blanco (10%) basado en la explosión
-            // Esto hace que brillen un poco más al separarse
             float extraGlow = uExplosion * 0.15; 
             color += vec3(extraGlow);
 
-            // --- NUEVO: EFECTO BLUR ---
-            // Modificamos la dureza del círculo.
-            // Si uExplosion es 0 (tulipán), el exponente es alto (1.5) -> Borde definido.
-            // Si uExplosion es 1 (disperso), el exponente es bajo (0.5) -> Gradiente suave (Blur).
             float softness = mix(1.5, 0.5, uExplosion);
-            
             float strength = 1.0 - (dist * 2.0);
             strength = pow(max(0.0, strength), softness);
 
@@ -137,7 +193,6 @@
             rotLerp: 0.1,  
             posLerp: 0.1,  
             baseZ: -5,
-            openThreshold: 0.6
         };
 
         const state = {
@@ -149,6 +204,8 @@
             handOpenness: 1.0,
             smoothedOpenness: 1.0 
         };
+
+        let simulationMode = false;
 
         // --- THREE.JS ---
         const scene = new THREE.Scene();
@@ -163,7 +220,7 @@
         renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
         document.body.appendChild(renderer.domElement);
 
-        // --- GEOMETRÍA DEL TULIPÁN ---
+        // --- GEOMETRÍA ---
         const geometry = new THREE.BufferGeometry();
         const count = 35000;
         const positions = [];
@@ -229,6 +286,8 @@
                 state.targetPos.set(0, -5, config.baseZ);
                 state.currentPos.lerp(state.targetPos, 0.05);
                 flower.position.copy(state.currentPos);
+                
+                // Rotación automática suave solo si no estamos simulando
                 flower.rotation.y += 0.002;
                 state.handOpenness = 1.0; 
             }
@@ -237,7 +296,7 @@
         }
         animate();
 
-        // --- VECTORES AUXILIARES Y MEDIAPIPE (Sin cambios en lógica) ---
+        // --- VECTORES ---
         const vWrist = new THREE.Vector3();
         const vIndex = new THREE.Vector3();
         const vPinky = new THREE.Vector3();
@@ -248,15 +307,69 @@
         const vRight = new THREE.Vector3();  
         const mRotation = new THREE.Matrix4();
         const qDummy = new THREE.Quaternion();
+        const eulerDummy = new THREE.Euler(); // Nuevo para la rotación manual
 
         const els = {
             loading: document.getElementById('loading'),
             status: document.getElementById('status-text'),
-            debug: document.getElementById('debug-state')
+            debug: document.getElementById('debug-state'),
+            video: document.getElementById('input_video'),
+            toggleBtn: document.getElementById('cam-toggle'),
+            manualControls: document.getElementById('manual-controls'),
+            simOpen: document.getElementById('sim-open'),
+            simX: document.getElementById('sim-x'),
+            simY: document.getElementById('sim-y'),
+            // Inputs de rotación 3 ejes
+            simRotX: document.getElementById('sim-rot-x'),
+            simRotY: document.getElementById('sim-rot-y'),
+            simRotZ: document.getElementById('sim-rot-z')
         };
 
+        // --- CONTROLES MANUALES (Actualizado con 3 ejes) ---
+        function updateSimulation() {
+            if (!simulationMode) return;
+            
+            state.handDetected = true;
+            state.handOpenness = parseFloat(els.simOpen.value);
+            
+            if (state.handOpenness < 0.3) {
+                els.debug.innerText = "STATE: FORMING TULIP (SIM)";
+                els.debug.style.color = "#fff";
+            } else {
+                els.debug.innerText = "STATE: DISPERSING (SIM)";
+                els.debug.style.color = "#ff6699";
+            }
+
+            state.targetPos.set(
+                parseFloat(els.simX.value), 
+                parseFloat(els.simY.value), 
+                -20 
+            );
+
+            // --- NUEVA LÓGICA DE ROTACIÓN 3D ---
+            const rX = parseFloat(els.simRotX.value);
+            const rY = parseFloat(els.simRotY.value);
+            const rZ = parseFloat(els.simRotZ.value);
+
+            // Creamos una rotación Euler XYZ y la pasamos al quaternion
+            eulerDummy.set(rX, rY, rZ, 'XYZ');
+            state.targetQuat.setFromEuler(eulerDummy);
+        }
+
+        // Listeners
+        els.simOpen.addEventListener('input', updateSimulation);
+        els.simX.addEventListener('input', updateSimulation);
+        els.simY.addEventListener('input', updateSimulation);
+        
+        els.simRotX.addEventListener('input', updateSimulation);
+        els.simRotY.addEventListener('input', updateSimulation);
+        els.simRotZ.addEventListener('input', updateSimulation);
+
+
+        // --- MEDIAPIPE ---
         function onResults(results) {
             els.loading.style.display = 'none';
+            if (simulationMode) return;
 
             if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
                 const lm = results.multiHandLandmarks[0];
@@ -279,10 +392,8 @@
                 tips.forEach(idx => {
                     totalDist += Math.hypot(lm[idx].x - lm[0].x, lm[idx].y - lm[0].y);
                 });
-                
                 const palmSize = Math.hypot(lm[0].x - lm[9].x, lm[0].y - lm[9].y);
                 const ratio = (totalDist / 4) / palmSize; 
-
                 let openness = THREE.MathUtils.mapLinear(ratio, 1.0, 1.9, 0, 1);
                 openness = THREE.MathUtils.clamp(openness, 0, 1);
                 state.handOpenness = openness;
@@ -299,15 +410,12 @@
                 vWrist.set(-lm[0].x, -lm[0].y, lm[0].z * zMult);
                 vIndex.set(-lm[5].x, -lm[5].y, lm[5].z * zMult);
                 vPinky.set(-lm[17].x, -lm[17].y, lm[17].z * zMult);
-
                 vA.subVectors(vIndex, vWrist).normalize();
                 vB.subVectors(vPinky, vWrist).normalize();
                 vNormal.crossVectors(vA, vB).normalize();
-
                 vUp.copy(vA);
                 vRight.crossVectors(vUp, vNormal).normalize();
                 vUp.crossVectors(vNormal, vRight).normalize();
-
                 mRotation.makeBasis(vRight, vUp, vNormal);
                 qDummy.setFromRotationMatrix(mRotation);
                 state.targetQuat.copy(qDummy);
@@ -330,18 +438,49 @@
         });
         hands.onResults(onResults);
 
-        const cameraUtils = new Camera(document.getElementById('input_video'), {
-            onFrame: async () => { await hands.send({image: document.getElementById('input_video')}); },
+        const cameraUtils = new Camera(els.video, {
+            onFrame: async () => { 
+                if(!simulationMode) {
+                    await hands.send({image: els.video}); 
+                }
+            },
             width: 640, height: 480
         });
         cameraUtils.start();
+
+        // --- BOTÓN TOGGLE ---
+        els.toggleBtn.addEventListener('click', () => {
+            simulationMode = !simulationMode;
+
+            if (simulationMode) {
+                // APAGAR CÁMARA (SIMULADO)
+                els.toggleBtn.innerText = "START CAMERA";
+                els.toggleBtn.style.color = "#00ffcc";
+                els.toggleBtn.style.borderColor = "#00ffcc";
+                els.video.pause();
+                els.video.classList.add('inactive');
+                els.manualControls.style.display = 'block';
+                els.status.innerText = "MANUAL OVERRIDE";
+                els.status.style.color = "#00ffcc";
+                updateSimulation();
+            } else {
+                // ENCENDER CÁMARA
+                els.toggleBtn.innerText = "STOP CAMERA";
+                els.toggleBtn.style.color = "#ff0055";
+                els.toggleBtn.style.borderColor = "#ff0055";
+                els.video.play();
+                els.video.classList.remove('inactive');
+                els.manualControls.style.display = 'none';
+                els.status.innerText = "SEARCHING HAND...";
+                state.handDetected = false; 
+            }
+        });
 
         window.addEventListener('resize', () => {
             camera.aspect = window.innerWidth / window.innerHeight;
             camera.updateProjectionMatrix();
             renderer.setSize(window.innerWidth, window.innerHeight);
         });
-
     </script>
 </body>
 </html>
