@@ -3,47 +3,94 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Holo-Tulip v4.0 (Swarm Physics)</title>
+    <title>Para Ti ❤️</title>
     <style>
         body { margin: 0; overflow: hidden; background-color: #050005; font-family: 'Consolas', monospace; }
         canvas { display: block; }
         
+        /* --- UI DE VIDEO --- */
         #input_video {
             position: absolute; bottom: 20px; right: 20px;
             width: 160px; height: 120px;
             z-index: 2; border-radius: 8px;
             transform: scaleX(-1);
-            border: 1px solid #ff0055; opacity: 0.4;
-            transition: opacity 0.3s, filter 0.3s;
+            border: 1px solid #ff0055; opacity: 0; /* Invisible al inicio */
+            transition: opacity 1s, filter 0.3s;
             object-fit: cover;
         }
+        #input_video.active { opacity: 0.4; }
         #input_video.inactive {
             filter: grayscale(100%) brightness(30%);
             opacity: 0.2;
         }
 
+        /* --- UI TEXTOS --- */
         #ui-layer {
             position: absolute; top: 20px; left: 20px; z-index: 3;
             color: rgba(255, 100, 150, 0.9); pointer-events: none;
+            display: none; /* Se activa tras el intro */
         }
         h1 { margin: 0; font-size: 1rem; letter-spacing: 2px; border-bottom: 1px solid rgba(255,0,100,0.5); padding-bottom: 5px; display: inline-block;}
         .status { font-size: 0.8rem; margin-top: 8px; }
 
-        #loading {
-            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
-            color: #ff0055; font-size: 1.2rem; text-shadow: 0 0 10px #ff0055;
-            pointer-events: none;
-            z-index: 100;
+        /* --- PANTALLA DE INTRODUCCIÓN --- */
+        #intro-screen {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: radial-gradient(circle, #2a0015 0%, #000000 100%);
+            z-index: 9999;
+            display: flex; flex-direction: column; justify-content: center; align-items: center;
+            transition: opacity 1.5s ease-out;
+        }
+        
+        #start-btn {
+            background: transparent;
+            color: #ff0055;
+            border: 2px solid #ff0055;
+            padding: 15px 40px;
+            font-size: 1.2rem;
+            letter-spacing: 3px;
+            cursor: pointer;
+            font-family: 'Courier New', monospace;
+            text-transform: uppercase;
+            box-shadow: 0 0 15px rgba(255, 0, 85, 0.3);
+            transition: all 0.4s;
+            border-radius: 4px;
+        }
+        #start-btn:hover {
+            background: #ff0055;
+            color: white;
+            box-shadow: 0 0 40px rgba(255, 0, 85, 0.8);
+            transform: scale(1.05);
         }
 
+        /* --- MENSAJE OCULTO --- */
+        #hidden-message {
+            position: absolute; top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+            font-family: 'Segoe UI', 'Helvetica', sans-serif;
+            font-weight: 300;
+            font-size: 3.5rem;
+            color: #fff;
+            text-shadow: 0 0 10px #ff0055, 0 0 30px #ff0055, 0 0 60px #ff0080;
+            opacity: 0;
+            pointer-events: none;
+            z-index: 50;
+            transition: opacity 0.5s ease, transform 0.5s ease;
+            text-align: center;
+            white-space: nowrap;
+            letter-spacing: 4px;
+        }
+
+        /* --- CONTROLES MANUALES (CAMARA OFF) --- */
         #cam-toggle {
             position: absolute; bottom: 150px; right: 20px; z-index: 10;
             background: rgba(0,0,0,0.7); border: 1px solid #ff0055;
             color: #ff0055; padding: 10px 15px; cursor: pointer;
             font-family: 'Consolas', monospace; text-transform: uppercase;
             border-radius: 4px; transition: all 0.3s;
+            display: none; /* Se muestra tras el intro */
         }
-        #cam-toggle:hover { background: #ff0055; color: #000; box-shadow: 0 0 15px #ff0055; }
+        #cam-toggle:hover { background: #ff0055; color: #000; }
 
         #manual-controls {
             display: none; 
@@ -58,34 +105,16 @@
         .control-group { margin-bottom: 8px; }
         .control-group label { display: flex; justify-content: space-between; color: #ff99bb; font-size: 0.75rem; margin-bottom: 2px; }
         .control-group input { width: 100%; cursor: pointer; accent-color: #ff0055; height: 10px; }
-        
         .sim-title { text-align: center; color: #fff; border-bottom: 1px solid #333; margin-bottom: 10px; font-size: 0.9rem; padding-bottom: 5px;}
     
-        /* --- ESTILO LUCIÉRNAGAS ATMOSFÉRICAS --- */
+        /* --- ESTILO LUCIÉRNAGAS --- */
         .firefly {
-            position: absolute;
-            border-radius: 50%;
-            pointer-events: none;
-            mix-blend-mode: screen;
-            background-color: #ffdc60; 
+            position: absolute; border-radius: 50%; pointer-events: none;
+            mix-blend-mode: screen; background-color: #ffdc60; 
             animation: hover infinite alternate ease-in-out, flash infinite ease-in-out;
         }
-
-        .layer-back { width: 2px; height: 2px; opacity: 0.4; filter: blur(2px); box-shadow: 0 0 5px #ffaa00; animation-duration: 25s, 5s; }
-        .layer-mid { width: 4px; height: 4px; opacity: 0.7; filter: blur(1px); box-shadow: 0 0 10px #ffaa00; animation-duration: 18s, 3.5s; }
-        .layer-front { width: 6px; height: 6px; opacity: 1; filter: blur(0); box-shadow: 0 0 15px #ffdc60, 0 0 30px #ffaa00; animation-duration: 12s, 2.5s; }
-
-        @keyframes hover {
-            0%   { transform: translate(0, 0); }
-            33%  { transform: translate(20px, -30px); }
-            66%  { transform: translate(-15px, 20px); }
-            100% { transform: translate(0, 0); }
-        }
-
-        @keyframes flash {
-            0%, 100% { opacity: 0.1; }
-            50% { opacity: 1; }
-        }
+        @keyframes hover { 0% { transform: translate(0, 0); } 100% { transform: translate(15px, -15px); } }
+        @keyframes flash { 0%, 100% { opacity: 0.2; } 50% { opacity: 1; } }
     </style>
     
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
@@ -95,56 +124,53 @@
 </head>
 <body>
 
-    <div id="loading">INITIALIZING SWARM LINK...</div>
-    
-    <div id="ui-layer">
-        <h1>PROJECT: TULIP v4.0</h1>
-        <div class="status" id="status-text">WAITING FOR HAND...</div>
-        <div class="status" id="debug-state">STATE: DISPERSED</div>
+    <div id="intro-screen">
+        <h2 style="color: #ff99cc; font-weight: 300; margin-bottom: 40px; letter-spacing: 2px;">Tengo algo para mostrarte...</h2>
+        <button id="start-btn">VER SORPRESA</button>
+        <p style="color:#555; margin-top:20px; font-size:0.7rem;">(Requiere cámara y audio)</p>
     </div>
+
+    <audio id="bg-music" loop>
+        <source src="https://assets.codepen.io/296057/romantic_piano.mp3" type="audio/mpeg">
+    </audio>
+
+    <div id="ui-layer">
+        <h1>PROJECT: TULIP</h1>
+        <div class="status" id="status-text">ESPERANDO MANO...</div>
+        <div class="status" id="debug-state">ESTADO: DISPERSO</div>
+    </div>
+
+    <div id="hidden-message">TE AMO ❤️</div>
 
     <video id="input_video" autoplay playsinline muted></video>
     
-    <button id="cam-toggle">STOP CAMERA</button>
+    <button id="cam-toggle">APAGAR CÁMARA / MANUAL</button>
 
     <div id="manual-controls">
-        <div class="sim-title">SIMULATION OVERRIDE</div>
+        <div class="sim-title">CONTROL MANUAL</div>
         
         <div class="control-group">
-            <label><span>FLOWER STATE</span> <span>(Open/Close)</span></label>
+            <label><span>APERTURA (Mensaje)</span></label>
             <input type="range" id="sim-open" min="0" max="1" step="0.01" value="1">
         </div>
-
         <div class="control-group">
-            <label>POSITION X</label>
-            <input type="range" id="sim-x" min="-25" max="25" step="0.1" value="0">
-        </div>
-
-        <div class="control-group">
-            <label>POSITION Y</label>
-            <input type="range" id="sim-y" min="-20" max="20" step="0.1" value="0">
-        </div>
-
-        <div class="control-group">
-            <label>ROTATION X (Pitch)</label>
+            <label>ROTACIÓN X</label>
             <input type="range" id="sim-rot-x" min="-3.14" max="3.14" step="0.1" value="0">
         </div>
-
         <div class="control-group">
-            <label>ROTATION Y (Yaw)</label>
+            <label>ROTACIÓN Y</label>
             <input type="range" id="sim-rot-y" min="-3.14" max="3.14" step="0.1" value="0">
         </div>
-
         <div class="control-group">
-            <label>ROTATION Z (Roll)</label>
-            <input type="range" id="sim-rot-z" min="-3.14" max="3.14" step="0.1" value="0">
+            <label>POSICIÓN Y</label>
+            <input type="range" id="sim-y" min="-20" max="20" step="0.1" value="0">
         </div>
     </div>
 
     <script id="vertexShader" type="x-shader/x-vertex">
         uniform float uTime;
         uniform float uExplosion; 
-        uniform vec3 uInertia; // Variable de inercia recibida de JS
+        uniform vec3 uInertia;
         
         attribute float aSize;
         attribute float aRandom;
@@ -155,34 +181,34 @@
         void main() {
             vec3 pos = position;
 
-            // --- 1. RUIDO BASE (Movimiento perpetuo) ---
+            // Ruido orgánico
             float noiseX = sin(uTime * 2.0 + aRandom * 10.0);
             float noiseY = cos(uTime * 1.5 + aRandom * 20.0);
             float noiseZ = sin(uTime * 2.5 + aRandom * 30.0);
             vec3 noiseVec = vec3(noiseX, noiseY, noiseZ);
 
-            // Respiración
+            // Respiración base
             pos += noiseVec * 0.2; 
 
-            // --- 2. LÓGICA DE EXPLOSIÓN ---
+            // --- LÓGICA DE EXPLOSIÓN ---
+            // Cuando explota, se vuelve caótico
             vec3 explosionDir = normalize(pos) * (20.0 + aRandom * 30.0);
             vec3 chaoticPos = pos + explosionDir + (noiseVec * 2.0);
             pos = mix(pos, chaoticPos, uExplosion);
 
-            // --- 3. LÓGICA DE ARRASTRE (SWARM DRAG) ---
-            // Las partículas con mayor 'aRandom' se arrastran más (se quedan atrás)
-            // Multiplicador 30.0 = Distancia del rastro
-            float dragFactor = aRandom * aRandom *1.5; 
+            // --- LÓGICA DE ARRASTRE ---
+            float dragFactor = aRandom * aRandom * 1.5; 
             pos -= uInertia * dragFactor;
 
             vec4 mvPosition = modelViewMatrix * vec4(pos, 1.0);
             gl_Position = projectionMatrix * mvPosition;
             
-            float sizeMod = 1.0 + uExplosion * 2.0; 
+            float sizeMod = 1.0 + uExplosion * 1.5; 
             gl_PointSize = (4.0 * aSize * sizeMod) * (60.0 / -mvPosition.z);
             
             vPos = position;
-            vAlpha = 1.0 - (uExplosion * 0.4);
+            // No desvanecemos del todo para que las partículas brillen alrededor del texto
+            vAlpha = 1.0 - (uExplosion * 0.2); 
         }
     </script>
 
@@ -194,60 +220,74 @@
         void main() {
             vec2 coord = gl_PointCoord - vec2(0.5);
             float dist = length(coord);
-            if(dist > 0.5) discard;
+            
+            // Círculo suave en vez de discard (mejor rendimiento móvil)
+            float circle = 1.0 - smoothstep(0.4, 0.5, dist);
+            if (circle < 0.01) discard;
 
             float height = smoothstep(-10.0, 20.0, vPos.y);
             
-            vec3 darkPink = vec3(0.8, 0.0, 0.4); 
-            vec3 lightPink = vec3(1.0, 0.6, 0.8); 
-            vec3 white = vec3(1.0, 1.0, 1.0);     
+            // COLORES ROMÁNTICOS
+            vec3 deepRed = vec3(0.8, 0.0, 0.2); 
+            vec3 softPink = vec3(1.0, 0.6, 0.8); 
+            vec3 gold = vec3(1.0, 0.9, 0.5); // Color dorado para la explosión
             
-            vec3 color = mix(darkPink, lightPink, height);
-            color = mix(color, white, pow(height, 3.0)); 
+            vec3 color = mix(deepRed, softPink, height);
+            
+            // Al explotar, brillan un poco en dorado
+            color = mix(color, gold, uExplosion * 0.6);
+            color = mix(color, vec3(1.0), pow(height, 3.0) * 0.5); 
 
+            // Tallo verde oscuro
             if(vPos.y < -8.0) {
-                color = mix(color, vec3(0.0, 0.5, 0.2), 0.7);
+                color = mix(color, vec3(0.0, 0.5, 0.2), 0.7 * (1.0 - uExplosion));
             }
 
-            float extraGlow = uExplosion * 0.15; 
-            color += vec3(extraGlow);
-
-            float softness = mix(1.5, 0.5, uExplosion);
-            float strength = 1.0 - (dist * 2.0);
-            strength = pow(max(0.0, strength), softness);
-
-            gl_FragColor = vec4(color, strength * vAlpha * 0.9);
+            float strength = circle * vAlpha;
+            gl_FragColor = vec4(color, strength);
         }
     </script>
 
     <script>
-        const config = {
-            rotLerp: 0.04,  
-            posLerp: 0.05,  
-            baseZ: -5,
-        };
-
+        // CONFIGURACIÓN INICIAL
+        const config = { rotLerp: 0.04, posLerp: 0.05, baseZ: -5 };
         const state = {
             targetQuat: new THREE.Quaternion(),
             currentQuat: new THREE.Quaternion(),
             targetPos: new THREE.Vector3(0, -5, config.baseZ),
             currentPos: new THREE.Vector3(0, -5, config.baseZ),
-            
-            // --- ESTADO PARA FÍSICA ---
             prevPos: new THREE.Vector3(0, -5, config.baseZ),
             inertia: new THREE.Vector3(0, 0, 0),
-            
             handDetected: false,
-            handOpenness: 1.0,
+            handOpenness: 1.0, // Empieza abierto (disperso)
             smoothedOpenness: 1.0 
         };
 
-        let simulationMode = false;
+        // UI ELEMENTS
+        const els = {
+            intro: document.getElementById('intro-screen'),
+            startBtn: document.getElementById('start-btn'),
+            uiLayer: document.getElementById('ui-layer'),
+            status: document.getElementById('status-text'),
+            debug: document.getElementById('debug-state'),
+            video: document.getElementById('input_video'),
+            toggleBtn: document.getElementById('cam-toggle'),
+            manualControls: document.getElementById('manual-controls'),
+            hiddenMsg: document.getElementById('hidden-message'),
+            bgMusic: document.getElementById('bg-music'),
+            // Sliders
+            simOpen: document.getElementById('sim-open'),
+            simRotX: document.getElementById('sim-rot-x'),
+            simRotY: document.getElementById('sim-rot-y'),
+            simY: document.getElementById('sim-y')
+        };
 
-        // --- THREE.JS ---
+        let simulationMode = false;
+        let experienceStarted = false;
+
+        // --- THREE.JS SETUP ---
         const scene = new THREE.Scene();
         scene.fog = new THREE.FogExp2(0x050005, 0.015);
-
         const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
         camera.position.z = 60;
         camera.position.y = 10;
@@ -257,7 +297,7 @@
         renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
         document.body.appendChild(renderer.domElement);
 
-        // --- GEOMETRÍA ---
+        // --- GEOMETRÍA TULIPÁN ---
         const geometry = new THREE.BufferGeometry();
         const count = 35000;
         const positions = [];
@@ -267,15 +307,15 @@
         for(let i=0; i<count; i++) {
             let u = Math.random();
             let v = Math.random() * Math.PI * 2;
-            
+            // Forma matemática de tulipán
             let radius = 3.0 + (u * 8.0) + (Math.sin(u * Math.PI) * 4.0);
             let petals = Math.sin(v * 3.0); 
             radius += petals * (u * 3.0);
-            
             let x = radius * Math.cos(v);
             let z = radius * Math.sin(v);
             let y = (u * 25.0) - 10.0; 
             
+            // Random jitter
             x += (Math.random() - 0.5) * 0.5;
             y += (Math.random() - 0.5) * 0.5;
             z += (Math.random() - 0.5) * 0.5;
@@ -295,7 +335,7 @@
             uniforms: { 
                 uTime: { value: 0 },
                 uExplosion: { value: 1.0 },
-                uInertia: { value: new THREE.Vector3(0,0,0) } // Inicializar inercia
+                uInertia: { value: new THREE.Vector3(0,0,0) }
             },
             transparent: true,
             depthWrite: false,
@@ -305,138 +345,78 @@
         const flower = new THREE.Points(geometry, material);
         scene.add(flower);
 
-        // --- LOOP ---
+        // --- LOOP DE ANIMACIÓN ---
         const clock = new THREE.Clock();
+        const eulerDummy = new THREE.Euler();
 
         function animate() {
             requestAnimationFrame(animate);
-            material.uniforms.uTime.value = clock.getElapsedTime();
+            const time = clock.getElapsedTime();
+            material.uniforms.uTime.value = time;
 
+            // Suavizado del valor de apertura
             state.smoothedOpenness += (state.handOpenness - state.smoothedOpenness) * 0.05;
             material.uniforms.uExplosion.value = state.smoothedOpenness;
 
-            if (state.handDetected) {
+            // --- LÓGICA DEL MENSAJE SECRETO ---
+            // Si la flor está "abierta" (explotada), mostramos el mensaje
+            if (state.smoothedOpenness > 0.6) {
+                let opacity = (state.smoothedOpenness - 0.6) * 2.5;
+                els.hiddenMsg.style.opacity = Math.min(opacity, 1);
+                let scale = 1 + (state.smoothedOpenness * 0.1);
+                els.hiddenMsg.style.transform = `translate(-50%, -50%) scale(${scale})`;
+            } else {
+                els.hiddenMsg.style.opacity = 0;
+            }
+
+            // Movimiento
+            if (state.handDetected || simulationMode) {
                 state.currentQuat.slerp(state.targetQuat, config.rotLerp);
                 flower.quaternion.copy(state.currentQuat);
-                
                 state.currentPos.lerp(state.targetPos, config.posLerp);
                 flower.position.copy(state.currentPos);
             } else {
+                // Modo Idle (flotando suave)
                 state.targetPos.set(0, -5, config.baseZ);
                 state.currentPos.lerp(state.targetPos, 0.02); 
                 flower.position.copy(state.currentPos);
-                
                 flower.rotation.y += 0.002;
-                state.handOpenness = 1.0; 
+                state.handOpenness = 1.0; // En idle se mantiene dispersa (bonito)
             }
 
-            // --- LÓGICA DE FÍSICA / ARRASTRE ---
-            // 1. Calcular delta de movimiento
+            // Física de Inercia
             const movement = new THREE.Vector3().subVectors(state.currentPos, state.prevPos);
-            
-            // 2. Sumar a la inercia (acumulación de fuerza)
             state.inertia.add(movement);
-
-            // 3. Fricción (0.92 hace que se detenga suavemente)
-            state.inertia.multiplyScalar(.92);
-
-            // 4. Enviar al shader
+            state.inertia.multiplyScalar(.92); // Fricción
             material.uniforms.uInertia.value.copy(state.inertia);
-
-            // 5. Guardar posición actual como previa para el siguiente frame
             state.prevPos.copy(state.currentPos);
-
 
             renderer.render(scene, camera);
         }
         animate();
 
-        // --- VECTORES DE CÁLCULO ---
-        const vWrist = new THREE.Vector3();
-        const vIndex = new THREE.Vector3();
-        const vPinky = new THREE.Vector3();
-        const vA = new THREE.Vector3();
-        const vB = new THREE.Vector3();
-        const vNormal = new THREE.Vector3(); 
-        const vUp = new THREE.Vector3();    
-        const vRight = new THREE.Vector3();  
-        const mRotation = new THREE.Matrix4();
-        const qDummy = new THREE.Quaternion();
-        const eulerDummy = new THREE.Euler(); 
-
-        const els = {
-            loading: document.getElementById('loading'),
-            status: document.getElementById('status-text'),
-            debug: document.getElementById('debug-state'),
-            video: document.getElementById('input_video'),
-            toggleBtn: document.getElementById('cam-toggle'),
-            manualControls: document.getElementById('manual-controls'),
-            simOpen: document.getElementById('sim-open'),
-            simX: document.getElementById('sim-x'),
-            simY: document.getElementById('sim-y'),
-            simRotX: document.getElementById('sim-rot-x'),
-            simRotY: document.getElementById('sim-rot-y'),
-            simRotZ: document.getElementById('sim-rot-z')
-        };
-
-        // --- CONTROLES MANUALES ---
-        function updateSimulation() {
-            if (!simulationMode) return;
-            
-            state.handDetected = true;
-            state.handOpenness = parseFloat(els.simOpen.value);
-            
-            if (state.handOpenness < 0.3) {
-                els.debug.innerText = "STATE: FORMING TULIP (SIM)";
-                els.debug.style.color = "#fff";
-            } else {
-                els.debug.innerText = "STATE: DISPERSING (SIM)";
-                els.debug.style.color = "#ff6699";
-            }
-
-            state.targetPos.set(
-                parseFloat(els.simX.value), 
-                parseFloat(els.simY.value), 
-                -20 
-            );
-
-            const rX = parseFloat(els.simRotX.value);
-            const rY = parseFloat(els.simRotY.value);
-            const rZ = parseFloat(els.simRotZ.value);
-
-            eulerDummy.set(rX, rY, rZ, 'XYZ');
-            state.targetQuat.setFromEuler(eulerDummy);
-        }
-
-        els.simOpen.addEventListener('input', updateSimulation);
-        els.simX.addEventListener('input', updateSimulation);
-        els.simY.addEventListener('input', updateSimulation);
-        els.simRotX.addEventListener('input', updateSimulation);
-        els.simRotY.addEventListener('input', updateSimulation);
-        els.simRotZ.addEventListener('input', updateSimulation);
-
-        // --- MEDIAPIPE ---
+        // --- MEDIAPIPE LOGIC ---
         function onResults(results) {
-            // Ocultar loading en primer frame exitoso
-            els.loading.style.display = 'none';
-            if (simulationMode) return;
+            if (!experienceStarted || simulationMode) return;
 
             if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
                 const lm = results.multiHandLandmarks[0];
 
                 if(!state.handDetected) {
                     state.handDetected = true;
-                    els.status.innerText = "LINK ESTABLISHED";
+                    els.status.innerText = "CONECTADO A TI";
                     els.status.style.color = "#ff0080";
                 }
 
+                // Posición
                 let x = (0.5 - lm[9].x) * 50; 
                 let y = (0.5 - lm[9].y) * 40;
                 const handScale = Math.hypot(lm[0].x - lm[9].x, lm[0].y - lm[9].y);
                 let z = THREE.MathUtils.mapLinear(handScale, 0.05, 0.4, -40, 20);
-
+                z = THREE.MathUtils.clamp(z, -50, 20); // Evitar clipping
                 state.targetPos.set(x, y, z);
 
+                // Apertura (Openness)
                 const tips = [8, 12, 16, 20];
                 let totalDist = 0;
                 tips.forEach(idx => {
@@ -449,31 +429,32 @@
                 state.handOpenness = openness;
 
                 if (openness < 0.3) {
-                    els.debug.innerText = "STATE: FORMING TULIP";
+                    els.debug.innerText = "ESTADO: FORMANDO FLOR";
                     els.debug.style.color = "#fff";
                 } else {
-                    els.debug.innerText = "STATE: DISPERSING";
+                    els.debug.innerText = "ESTADO: DISPERSANDO";
                     els.debug.style.color = "#ff6699";
                 }
 
-                const zMult = 1.0; 
-                vWrist.set(-lm[0].x, -lm[0].y, lm[0].z * zMult);
-                vIndex.set(-lm[5].x, -lm[5].y, lm[5].z * zMult);
-                vPinky.set(-lm[17].x, -lm[17].y, lm[17].z * zMult);
-                vA.subVectors(vIndex, vWrist).normalize();
-                vB.subVectors(vPinky, vWrist).normalize();
-                vNormal.crossVectors(vA, vB).normalize();
-                vUp.copy(vA);
-                vRight.crossVectors(vUp, vNormal).normalize();
+                // Rotación
+                const vWrist = new THREE.Vector3(-lm[0].x, -lm[0].y, lm[0].z);
+                const vIndex = new THREE.Vector3(-lm[5].x, -lm[5].y, lm[5].z);
+                const vPinky = new THREE.Vector3(-lm[17].x, -lm[17].y, lm[17].z);
+                
+                const vA = new THREE.Vector3().subVectors(vIndex, vWrist).normalize();
+                const vB = new THREE.Vector3().subVectors(vPinky, vWrist).normalize();
+                const vNormal = new THREE.Vector3().crossVectors(vA, vB).normalize();
+                const vUp = vA.clone();
+                const vRight = new THREE.Vector3().crossVectors(vUp, vNormal).normalize();
                 vUp.crossVectors(vNormal, vRight).normalize();
-                mRotation.makeBasis(vRight, vUp, vNormal);
-                qDummy.setFromRotationMatrix(mRotation);
-                state.targetQuat.copy(qDummy);
+
+                const mRotation = new THREE.Matrix4().makeBasis(vRight, vUp, vNormal);
+                state.targetQuat.setFromRotationMatrix(mRotation);
 
             } else {
                 if(state.handDetected) {
                     state.handDetected = false;
-                    els.status.innerText = "SEARCHING HAND...";
+                    els.status.innerText = "BUSCANDO TU MANO...";
                     els.status.style.color = "#777";
                 }
             }
@@ -488,81 +469,116 @@
         });
         hands.onResults(onResults);
 
-        // Inicialización de la Cámara
+        // Inicialización de cámara (PERO NO START TODAVÍA)
         const cameraUtils = new Camera(els.video, {
             onFrame: async () => { 
-                if(!simulationMode) {
+                if(experienceStarted && !simulationMode) {
                     await hands.send({image: els.video}); 
                 }
             },
             width: 640, height: 480
         });
-        cameraUtils.start();
 
-        // --- BOTÓN TOGGLE ---
+        // --- INTERACCIÓN DE USUARIO ---
+
+        // 1. CLICK EN EL BOTÓN DE INICIO
+        els.startBtn.addEventListener('click', () => {
+            // Desvanecer intro
+            els.intro.style.opacity = '0';
+            setTimeout(() => { 
+                els.intro.style.display = 'none'; 
+                els.uiLayer.style.display = 'block';
+                els.toggleBtn.style.display = 'block';
+            }, 1500);
+
+            // Audio
+            els.bgMusic.volume = 0.5;
+            els.bgMusic.play().catch(e => console.log("Audio play failed req interaction", e));
+
+            // Iniciar cámara
+            experienceStarted = true;
+            els.video.classList.add('active');
+            cameraUtils.start();
+        });
+
+        // 2. TOGGLE CÁMARA / MANUAL
         els.toggleBtn.addEventListener('click', () => {
             simulationMode = !simulationMode;
 
             if (simulationMode) {
-                // APAGAR CÁMARA (SIMULADO)
-                els.toggleBtn.innerText = "START CAMERA";
-                els.toggleBtn.style.color = "#00ffcc";
-                els.toggleBtn.style.borderColor = "#00ffcc";
-                els.video.pause();
+                // MODO MANUAL (SLIDERS)
+                els.toggleBtn.innerText = "ACTIVAR CÁMARA";
+                els.video.classList.remove('active');
                 els.video.classList.add('inactive');
                 els.manualControls.style.display = 'block';
-                els.status.innerText = "MANUAL OVERRIDE";
-                els.status.style.color = "#00ffcc";
+                els.status.innerText = "CONTROL MANUAL";
                 updateSimulation();
             } else {
-                // ENCENDER CÁMARA
-                els.toggleBtn.innerText = "STOP CAMERA";
-                els.toggleBtn.style.color = "#ff0055";
-                els.toggleBtn.style.borderColor = "#ff0055";
-                els.video.play();
+                // MODO CÁMARA
+                els.toggleBtn.innerText = "APAGAR CÁMARA / MANUAL";
                 els.video.classList.remove('inactive');
+                els.video.classList.add('active');
                 els.manualControls.style.display = 'none';
-                els.status.innerText = "SEARCHING HAND...";
-                state.handDetected = false; 
+                els.status.innerText = "BUSCANDO TU MANO...";
+                
+                // Si la cámara no estaba corriendo, aseguramos start
+                if(experienceStarted) cameraUtils.start();
             }
         });
+
+        // 3. LOGICA SLIDERS
+        function updateSimulation() {
+            if (!simulationMode) return;
+            
+            state.handDetected = true;
+            state.handOpenness = parseFloat(els.simOpen.value);
+            
+            // Texto Debug
+            if (state.handOpenness < 0.3) {
+                els.debug.innerText = "ESTADO: FORMANDO (SIM)";
+                els.debug.style.color = "#fff";
+            } else {
+                els.debug.innerText = "ESTADO: DISPERSO (SIM)";
+                els.debug.style.color = "#ff6699";
+            }
+
+            // Posición
+            state.targetPos.set(0, parseFloat(els.simY.value), -20);
+
+            // Rotación
+            const rX = parseFloat(els.simRotX.value);
+            const rY = parseFloat(els.simRotY.value);
+            eulerDummy.set(rX, rY, 0, 'XYZ');
+            state.targetQuat.setFromEuler(eulerDummy);
+        }
+
+        els.simOpen.addEventListener('input', updateSimulation);
+        els.simRotX.addEventListener('input', updateSimulation);
+        els.simRotY.addEventListener('input', updateSimulation);
+        els.simY.addEventListener('input', updateSimulation);
+
+        // --- EXTRAS VISUALES (Luciérnagas) ---
+        function createFireflies() {
+            for (let i = 0; i < 40; i++) {
+                const f = document.createElement('div');
+                f.classList.add('firefly');
+                document.body.appendChild(f);
+                f.style.top = Math.random() * 100 + 'vh';
+                f.style.left = Math.random() * 100 + 'vw';
+                const s = Math.random() * 3 + 2; 
+                f.style.width = s + 'px'; f.style.height = s + 'px';
+                f.style.opacity = Math.random() * 0.5 + 0.3;
+                f.style.animationDuration = (Math.random() * 10 + 10) + 's, ' + (Math.random() * 2 + 1) + 's';
+                f.style.animationDelay = '-' + Math.random() * 10 + 's';
+            }
+        }
+        createFireflies();
 
         window.addEventListener('resize', () => {
             camera.aspect = window.innerWidth / window.innerHeight;
             camera.updateProjectionMatrix();
             renderer.setSize(window.innerWidth, window.innerHeight);
         });
-
-        // --- GENERADOR DE LUCIÉRNAGAS ---
-        function createFireflies() {
-            document.querySelectorAll('.firefly').forEach(e => e.remove());
-            const count = 50; 
-
-            for (let i = 0; i < count; i++) {
-                const f = document.createElement('div');
-                f.classList.add('firefly');
-                document.body.appendChild(f);
-
-                f.style.top = Math.random() * 100 + 'vh';
-                f.style.left = Math.random() * 100 + 'vw';
-
-                const depthRoll = Math.random();
-                if (depthRoll < 0.5) {
-                    f.classList.add('layer-back');
-                } else if (depthRoll < 0.85) {
-                    f.classList.add('layer-mid');
-                } else {
-                    f.classList.add('layer-front');
-                }
-
-                const hue = Math.random() > 0.5 ? 50 : 58; 
-                f.style.backgroundColor = `hsl(${hue}, 100%, 70%)`;
-                f.style.animationDelay = `-${Math.random() * 20}s, -${Math.random() * 5}s`;
-            }
-        }
-
-        createFireflies();
-
     </script>
 </body>
 </html>
