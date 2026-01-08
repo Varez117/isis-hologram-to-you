@@ -24,14 +24,39 @@
             opacity: 0.2;
         }
 
-        /* --- UI TEXTOS --- */
+        /* --- UI TEXTOS E INDICADORES --- */
         #ui-layer {
             position: absolute; top: 20px; left: 20px; z-index: 3;
             color: rgba(255, 100, 150, 0.9); pointer-events: none;
             display: none; /* Se activa tras el intro */
         }
-        h1 { margin: 0; font-size: 1rem; letter-spacing: 2px; border-bottom: 1px solid rgba(255,0,100,0.5); padding-bottom: 5px; display: inline-block;}
-        .status { font-size: 0.8rem; margin-top: 8px; }
+        
+        /* Contenedor de los círculos de progreso */
+        #progress-container {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 10px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid rgba(255,0,100,0.3);
+        }
+        
+        /* Estilo de cada círculo */
+        .p-circle {
+            width: 12px;
+            height: 12px;
+            border: 2px solid #ff0055; /* Color del borde (tulipán) */
+            border-radius: 50%;
+            background: transparent;
+            transition: background-color 0.3s, box-shadow 0.3s;
+        }
+        
+        /* Clase cuando el círculo está "lleno" */
+        .p-circle.filled {
+            background-color: #ff0055;
+            box-shadow: 0 0 10px #ff0055, 0 0 20px #ff99cc;
+        }
+
+        .status { font-size: 0.8rem; margin-top: 5px; }
 
         /* --- PANTALLA DE INTRODUCCIÓN --- */
         #intro-screen {
@@ -117,9 +142,9 @@
             animation: hover infinite alternate ease-in-out, flash infinite ease-in-out;
         }
 
-        .layer-back { width: 2px; height: 2px; opacity: 0.4; filter: blur(2px); box-shadow: 0 0 5px #ffaa00; animation-duration: 25s, 5s; }
-        .layer-mid { width: 4px; height: 4px; opacity: 0.7; filter: blur(1px); box-shadow: 0 0 10px #ffaa00; animation-duration: 18s, 3.5s; }
-        .layer-front { width: 6px; height: 6px; opacity: 1; filter: blur(0); box-shadow: 0 0 15px #ffdc60, 0 0 30px #ffaa00; animation-duration: 12s, 2.5s; }
+        .layer-back { width: 4px; height: 4px; opacity: 0.4; filter: blur(2px); box-shadow: 0 0 5px #ffaa00; animation-duration: 25s, 5s; }
+        .layer-mid { width: 6px; height: 6px; opacity: 0.7; filter: blur(1px); box-shadow: 0 0 10px #ffaa00; animation-duration: 18s, 3.5s; }
+        .layer-front { width: 8px; height: 8px; opacity: 1; filter: blur(0); box-shadow: 0 0 15px #ffdc60, 0 0 30px #ffaa00; animation-duration: 12s, 2.5s; }
 
         @keyframes hover {
             0%   { transform: translate(0, 0); }
@@ -131,6 +156,34 @@
         @keyframes flash {
             0%, 100% { opacity: 0.1; }
             50% { opacity: 1; }
+        }
+
+        /* --- BOTÓN FINAL CON ESTILO DE ENERGÍA --- */
+        #secret-btn {
+            position: absolute;
+            top: 75%; left: 50%;
+            transform: translate(-50%, -50%);
+            padding: 20px 50px;
+            color: #fff;
+            text-decoration: none;
+            font-family: 'Courier New', monospace;
+            font-size: 1.2rem;
+            letter-spacing: 4px;
+            background: rgba(0, 0, 0, 0.6);
+            border: 1px solid #ff99cc;
+            /* Efecto de resplandor tipo partículas */
+            box-shadow: 0 0 15px #ff0055, 0 0 30px #ff0055, inset 0 0 20px rgba(255, 0, 85, 0.5);
+            opacity: 0;
+            pointer-events: none; /* No clickeable mientras está oculto */
+            z-index: 100;
+            transition: opacity 2s ease-in-out, transform 0.3s;
+            border-radius: 4px;
+            text-transform: uppercase;
+        }
+        #secret-btn:hover {
+            background: #ff0055;
+            box-shadow: 0 0 50px #ff0055, 0 0 80px #ff99cc;
+            transform: translate(-50%, -50%) scale(1.1);
         }
     </style>
     
@@ -152,12 +205,21 @@
     </audio>
 
     <div id="ui-layer">
-        <h1>PROJECT: TULIP</h1>
+        <div id="progress-container">
+            <div class="p-circle"></div>
+            <div class="p-circle"></div>
+            <div class="p-circle"></div>
+            <div class="p-circle"></div>
+            <div class="p-circle"></div>
+        </div>
+
         <div class="status" id="status-text"></div>
         <div class="status" id="debug-state">ESTADO: DISPERSO</div>
     </div>
 
     <div id="hidden-message"></div>
+
+    <a id="secret-btn" href="https://youtu.be/LjhCEhWiKXk?si=hWxo1Ag9m1_U2L_N" target="_blank">VER REGALO</a>
 
     <video id="input_video" autoplay playsinline muted></video>
     
@@ -365,18 +427,57 @@
         // --- LOOP DE ANIMACIÓN ---
         const clock = new THREE.Clock();
         const eulerDummy = new THREE.Euler();
+        
+        // Variable para contar el tiempo cerrado
+        let closedTimer = 0;
+        const secretBtn = document.getElementById('secret-btn');
+        const progressCircles = document.querySelectorAll('.p-circle'); // Referencia a los 5 círculos
 
         function animate() {
             requestAnimationFrame(animate);
-            const time = clock.getElapsedTime();
+            
+            const delta = clock.getDelta(); // Tiempo entre frames para el contador
+            const time = clock.getElapsedTime(); // Tiempo total para los shaders
+            
             material.uniforms.uTime.value = time;
 
             // Suavizado del valor de apertura
             state.smoothedOpenness += (state.handOpenness - state.smoothedOpenness) * 0.05;
             material.uniforms.uExplosion.value = state.smoothedOpenness;
 
-            // --- LÓGICA DEL MENSAJE SECRETO ---
-            // Si la flor está "abierta" (explotada), mostramos el mensaje
+            // --- LÓGICA DE TIEMPO Y CÍRCULOS (10 SEGUNDOS) ---
+            // Si la flor está "cerrada" (valor menor a 0.3)
+            if (state.smoothedOpenness < 0.3) {
+                closedTimer += delta;
+            } else {
+                closedTimer = 0; // Se resetea si se abre
+                secretBtn.style.opacity = 0;
+                secretBtn.style.pointerEvents = 'none';
+            }
+
+            // Actualizar los círculos visuales
+            // Dividimos el tiempo entre 2, porque 10s / 5 círculos = 2s por círculo
+            const circlesToFill = Math.floor(closedTimer / 2); 
+            
+            progressCircles.forEach((circle, index) => {
+                if (index < circlesToFill) {
+                    circle.classList.add('filled');
+                } else {
+                    circle.classList.remove('filled');
+                }
+            });
+
+            // Si lleva más de 10 segundos cerrada (todos los círculos llenos)
+            if (closedTimer > 10) {
+                secretBtn.style.opacity = 1;
+                secretBtn.style.pointerEvents = 'auto'; 
+                els.status.innerText = "¡FLOR CRISTALIZADA!";
+                // Aseguramos que todos se vean llenos visualmente
+                progressCircles.forEach(c => c.classList.add('filled'));
+            }
+            // ---------------------------------
+
+            // --- LÓGICA DEL MENSAJE SECRETO (Original) ---
             if (state.smoothedOpenness > 0.6) {
                 let opacity = (state.smoothedOpenness - 0.6) * 2.5;
                 els.hiddenMsg.style.opacity = Math.min(opacity, 1);
@@ -393,12 +494,12 @@
                 state.currentPos.lerp(state.targetPos, config.posLerp);
                 flower.position.copy(state.currentPos);
             } else {
-                // Modo Idle (flotando suave)
+                // Modo Idle
                 state.targetPos.set(0, -5, config.baseZ);
                 state.currentPos.lerp(state.targetPos, 0.02); 
                 flower.position.copy(state.currentPos);
                 flower.rotation.y += 0.002;
-                state.handOpenness = 1.0; // En idle se mantiene dispersa (bonito)
+                state.handOpenness = 1.0; 
             }
 
             // Física de Inercia
@@ -577,7 +678,7 @@
         // --- EXTRAS VISUALES (LUCIÉRNAGAS - SISTEMA V2) ---
         function createFireflies() {
             document.querySelectorAll('.firefly').forEach(e => e.remove());
-            const count = 50; 
+            const count = 70; 
 
             for (let i = 0; i < count; i++) {
                 const f = document.createElement('div');
