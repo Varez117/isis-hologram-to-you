@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Holo-Tulip Interface v3.5 (Physics & Life)</title>
+    <title>Holo-Tulip v4.0 (Swarm Physics)</title>
     <style>
         body { margin: 0; overflow: hidden; background-color: #050005; font-family: 'Consolas', monospace; }
         canvas { display: block; }
@@ -15,6 +15,7 @@
             transform: scaleX(-1);
             border: 1px solid #ff0055; opacity: 0.4;
             transition: opacity 0.3s, filter 0.3s;
+            object-fit: cover;
         }
         #input_video.inactive {
             filter: grayscale(100%) brightness(30%);
@@ -32,6 +33,7 @@
             position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
             color: #ff0055; font-size: 1.2rem; text-shadow: 0 0 10px #ff0055;
             pointer-events: none;
+            z-index: 100;
         }
 
         #cam-toggle {
@@ -58,6 +60,32 @@
         .control-group input { width: 100%; cursor: pointer; accent-color: #ff0055; height: 10px; }
         
         .sim-title { text-align: center; color: #fff; border-bottom: 1px solid #333; margin-bottom: 10px; font-size: 0.9rem; padding-bottom: 5px;}
+    
+        /* --- ESTILO LUCIÉRNAGAS ATMOSFÉRICAS --- */
+        .firefly {
+            position: absolute;
+            border-radius: 50%;
+            pointer-events: none;
+            mix-blend-mode: screen;
+            background-color: #ffdc60; 
+            animation: hover infinite alternate ease-in-out, flash infinite ease-in-out;
+        }
+
+        .layer-back { width: 2px; height: 2px; opacity: 0.4; filter: blur(2px); box-shadow: 0 0 5px #ffaa00; animation-duration: 25s, 5s; }
+        .layer-mid { width: 4px; height: 4px; opacity: 0.7; filter: blur(1px); box-shadow: 0 0 10px #ffaa00; animation-duration: 18s, 3.5s; }
+        .layer-front { width: 6px; height: 6px; opacity: 1; filter: blur(0); box-shadow: 0 0 15px #ffdc60, 0 0 30px #ffaa00; animation-duration: 12s, 2.5s; }
+
+        @keyframes hover {
+            0%   { transform: translate(0, 0); }
+            33%  { transform: translate(20px, -30px); }
+            66%  { transform: translate(-15px, 20px); }
+            100% { transform: translate(0, 0); }
+        }
+
+        @keyframes flash {
+            0%, 100% { opacity: 0.1; }
+            50% { opacity: 1; }
+        }
     </style>
     
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
@@ -67,15 +95,16 @@
 </head>
 <body>
 
-    
+    <div id="loading">INITIALIZING SWARM LINK...</div>
     
     <div id="ui-layer">
-        <h1>PROJECT: TULIP</h1>
+        <h1>PROJECT: TULIP v4.0</h1>
         <div class="status" id="status-text">WAITING FOR HAND...</div>
         <div class="status" id="debug-state">STATE: DISPERSED</div>
     </div>
 
-    <video id="input_video"></video>
+    <video id="input_video" autoplay playsinline muted></video>
+    
     <button id="cam-toggle">STOP CAMERA</button>
 
     <div id="manual-controls">
@@ -115,8 +144,11 @@
     <script id="vertexShader" type="x-shader/x-vertex">
         uniform float uTime;
         uniform float uExplosion; 
+        uniform vec3 uInertia; // Variable de inercia recibida de JS
+        
         attribute float aSize;
         attribute float aRandom;
+        
         varying vec3 vPos;
         varying float vAlpha;
 
@@ -124,25 +156,24 @@
             vec3 pos = position;
 
             // --- 1. RUIDO BASE (Movimiento perpetuo) ---
-            // Calculamos el ruido una vez
             float noiseX = sin(uTime * 2.0 + aRandom * 10.0);
             float noiseY = cos(uTime * 1.5 + aRandom * 20.0);
             float noiseZ = sin(uTime * 2.5 + aRandom * 30.0);
             vec3 noiseVec = vec3(noiseX, noiseY, noiseZ);
 
-            // APLICAR RESPIRACIÓN SIEMPRE (incluso cerrada)
-            // Esto evita que se congelen. Se mueven un poquito (0.2 de amplitud)
+            // Respiración
             pos += noiseVec * 0.2; 
 
             // --- 2. LÓGICA DE EXPLOSIÓN ---
-            // Dirección hacia afuera
             vec3 explosionDir = normalize(pos) * (20.0 + aRandom * 30.0);
-            
-            // Posición final dispersa: Posición actual + explosión + mucho más ruido
             vec3 chaoticPos = pos + explosionDir + (noiseVec * 2.0);
-            
-            // Interpolamos entre "Posición Respirando" y "Posición Caótica"
             pos = mix(pos, chaoticPos, uExplosion);
+
+            // --- 3. LÓGICA DE ARRASTRE (SWARM DRAG) ---
+            // Las partículas con mayor 'aRandom' se arrastran más (se quedan atrás)
+            // Multiplicador 30.0 = Distancia del rastro
+            float dragFactor = aRandom * aRandom *1.5; 
+            pos -= uInertia * dragFactor;
 
             vec4 mvPosition = modelViewMatrix * vec4(pos, 1.0);
             gl_Position = projectionMatrix * mvPosition;
@@ -150,7 +181,7 @@
             float sizeMod = 1.0 + uExplosion * 2.0; 
             gl_PointSize = (4.0 * aSize * sizeMod) * (60.0 / -mvPosition.z);
             
-            vPos = position; // Pasamos la posición original para el color
+            vPos = position;
             vAlpha = 1.0 - (uExplosion * 0.4);
         }
     </script>
@@ -191,9 +222,6 @@
 
     <script>
         const config = {
-            // --- AJUSTE DE "PESADEZ" ---
-            // Valores más bajos = más pesadez/inercia (tarda más en llegar)
-            // Valores altos (0.1 - 0.2) = más rápido/ligero
             rotLerp: 0.04,  
             posLerp: 0.05,  
             baseZ: -5,
@@ -204,6 +232,11 @@
             currentQuat: new THREE.Quaternion(),
             targetPos: new THREE.Vector3(0, -5, config.baseZ),
             currentPos: new THREE.Vector3(0, -5, config.baseZ),
+            
+            // --- ESTADO PARA FÍSICA ---
+            prevPos: new THREE.Vector3(0, -5, config.baseZ),
+            inertia: new THREE.Vector3(0, 0, 0),
+            
             handDetected: false,
             handOpenness: 1.0,
             smoothedOpenness: 1.0 
@@ -261,7 +294,8 @@
             fragmentShader: document.getElementById('fragmentShader').textContent,
             uniforms: { 
                 uTime: { value: 0 },
-                uExplosion: { value: 1.0 } 
+                uExplosion: { value: 1.0 },
+                uInertia: { value: new THREE.Vector3(0,0,0) } // Inicializar inercia
             },
             transparent: true,
             depthWrite: false,
@@ -278,13 +312,10 @@
             requestAnimationFrame(animate);
             material.uniforms.uTime.value = clock.getElapsedTime();
 
-            // Inercia también para la apertura
             state.smoothedOpenness += (state.handOpenness - state.smoothedOpenness) * 0.05;
             material.uniforms.uExplosion.value = state.smoothedOpenness;
 
             if (state.handDetected) {
-                // AQUÍ OCURRE LA MAGIA DE LA PESADEZ
-                // Usamos los valores Lerp bajos definidos en config
                 state.currentQuat.slerp(state.targetQuat, config.rotLerp);
                 flower.quaternion.copy(state.currentQuat);
                 
@@ -292,18 +323,35 @@
                 flower.position.copy(state.currentPos);
             } else {
                 state.targetPos.set(0, -5, config.baseZ);
-                state.currentPos.lerp(state.targetPos, 0.02); // Retorno muy suave
+                state.currentPos.lerp(state.targetPos, 0.02); 
                 flower.position.copy(state.currentPos);
                 
                 flower.rotation.y += 0.002;
                 state.handOpenness = 1.0; 
             }
 
+            // --- LÓGICA DE FÍSICA / ARRASTRE ---
+            // 1. Calcular delta de movimiento
+            const movement = new THREE.Vector3().subVectors(state.currentPos, state.prevPos);
+            
+            // 2. Sumar a la inercia (acumulación de fuerza)
+            state.inertia.add(movement);
+
+            // 3. Fricción (0.92 hace que se detenga suavemente)
+            state.inertia.multiplyScalar(.92);
+
+            // 4. Enviar al shader
+            material.uniforms.uInertia.value.copy(state.inertia);
+
+            // 5. Guardar posición actual como previa para el siguiente frame
+            state.prevPos.copy(state.currentPos);
+
+
             renderer.render(scene, camera);
         }
         animate();
 
-        // --- VECTORES ---
+        // --- VECTORES DE CÁLCULO ---
         const vWrist = new THREE.Vector3();
         const vIndex = new THREE.Vector3();
         const vPinky = new THREE.Vector3();
@@ -360,7 +408,6 @@
             state.targetQuat.setFromEuler(eulerDummy);
         }
 
-        // Listeners
         els.simOpen.addEventListener('input', updateSimulation);
         els.simX.addEventListener('input', updateSimulation);
         els.simY.addEventListener('input', updateSimulation);
@@ -368,9 +415,9 @@
         els.simRotY.addEventListener('input', updateSimulation);
         els.simRotZ.addEventListener('input', updateSimulation);
 
-
         // --- MEDIAPIPE ---
         function onResults(results) {
+            // Ocultar loading en primer frame exitoso
             els.loading.style.display = 'none';
             if (simulationMode) return;
 
@@ -441,6 +488,7 @@
         });
         hands.onResults(onResults);
 
+        // Inicialización de la Cámara
         const cameraUtils = new Camera(els.video, {
             onFrame: async () => { 
                 if(!simulationMode) {
@@ -484,6 +532,37 @@
             camera.updateProjectionMatrix();
             renderer.setSize(window.innerWidth, window.innerHeight);
         });
+
+        // --- GENERADOR DE LUCIÉRNAGAS ---
+        function createFireflies() {
+            document.querySelectorAll('.firefly').forEach(e => e.remove());
+            const count = 50; 
+
+            for (let i = 0; i < count; i++) {
+                const f = document.createElement('div');
+                f.classList.add('firefly');
+                document.body.appendChild(f);
+
+                f.style.top = Math.random() * 100 + 'vh';
+                f.style.left = Math.random() * 100 + 'vw';
+
+                const depthRoll = Math.random();
+                if (depthRoll < 0.5) {
+                    f.classList.add('layer-back');
+                } else if (depthRoll < 0.85) {
+                    f.classList.add('layer-mid');
+                } else {
+                    f.classList.add('layer-front');
+                }
+
+                const hue = Math.random() > 0.5 ? 50 : 58; 
+                f.style.backgroundColor = `hsl(${hue}, 100%, 70%)`;
+                f.style.animationDelay = `-${Math.random() * 20}s, -${Math.random() * 5}s`;
+            }
+        }
+
+        createFireflies();
+
     </script>
 </body>
 </html>
